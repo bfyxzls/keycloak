@@ -19,11 +19,11 @@
 :cluster-name: infinispan
 
 // Other common attributes
-:operator-docs: https://infinispan.org/docs/infinispan-operator/main/operator.html
-:xsite-docs: https://infinispan.org/docs/stable/titles/xsite/xsite.html
 :ocp: OpenShift
-:ispn: Infinispan
-:ispn-operator: Infinispan Operator
-:kc: Keycloak
+:ispn-operator: {jdgserver_name} Operator
 :site-a: Site-A
 :site-b: Site-B
+:stale-site: offline
+:keep-site: active
+:keep-site-name: {site-a-cr}
+:stale-site-name: {site-b-cr}

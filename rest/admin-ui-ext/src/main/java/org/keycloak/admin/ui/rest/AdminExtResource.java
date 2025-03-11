@@ -35,6 +35,11 @@ public final class AdminExtResource {
         return new AvailableRoleMappingResource(session, realm, auth);
     }
 
+    @Path("/available-event-listeners")
+    public AvailableEventListenersResource availableEventListeners() {
+        return new AvailableEventListenersResource(session, auth);
+    }
+
     @Path("/effective-roles")
     public EffectiveRoleMappingResource effectiveRoles() {
         return new EffectiveRoleMappingResource(session, realm, auth);
@@ -47,16 +52,11 @@ public final class AdminExtResource {
 
     @Path("/realms")
     public UIRealmsResource realms() {
-        return new UIRealmsResource(session);
+        return new UIRealmsResource(session, auth);
     }
 
     @Path("/")
     public UIRealmResource realm() {
         return new UIRealmResource(session, auth, adminEvent);
-    }
-
-    @Path("/users")
-    public UsersResource users() {
-        return new UsersResource(session);
     }
 }

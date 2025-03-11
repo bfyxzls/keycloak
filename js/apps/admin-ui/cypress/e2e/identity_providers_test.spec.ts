@@ -89,11 +89,6 @@ describe("Identity provider test", () => {
         },
         { testName: "Microsoft", displayName: "Microsoft", alias: "microsoft" },
         {
-          testName: "Openshift-v3",
-          displayName: "Openshift v3",
-          alias: "openshift-v3",
-        },
-        {
           testName: "Openshift-v4",
           displayName: "Openshift v4",
           alias: "openshift-v4",
@@ -124,8 +119,10 @@ describe("Identity provider test", () => {
           }
           const instance = getSocialIdpClassInstance($idp.testName);
           instance
-            .typeDisplayOrder("0")
-            .clickAdd()
+            .typeClientId("1")
+            .typeClientId("")
+            .typeClientSecret("1")
+            .typeClientSecret("")
             .assertRequiredFieldsErrorsExist()
             .fillData($idp.testName)
             .clickAdd()
@@ -139,10 +136,7 @@ describe("Identity provider test", () => {
       createProviderPage.checkGitHubCardVisible().clickGitHubCard();
 
       createProviderPage.checkAddButtonDisabled();
-      createProviderPage
-        .fill(identityProviderName)
-        .clickAdd()
-        .checkClientIdRequiredMessage(true);
+      createProviderPage.fill(identityProviderName).checkAddButtonDisabled();
       createProviderPage.fill(identityProviderName, "123").clickAdd();
       masthead.checkNotificationMessage(createSuccessMsg, true);
 
@@ -298,9 +292,8 @@ describe("Identity provider test", () => {
       createProviderPage.checkAddButtonDisabled();
       createProviderPage
         .fill(identityProviderName)
-        .clickAdd()
-        .checkClientIdRequiredMessage(true);
-      createProviderPage.fill(identityProviderName, "123").clickAdd();
+        .fill(identityProviderName, "123")
+        .clickAdd();
       masthead.checkNotificationMessage(createSuccessMsg, true);
 
       sidebarPage.goToIdentityProviders();

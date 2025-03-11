@@ -20,6 +20,7 @@ package org.keycloak.testsuite.client;
 import static org.junit.Assert.assertEquals;
 import static org.keycloak.testsuite.admin.AbstractAdminTest.loadJson;
 
+import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -59,8 +60,9 @@ import org.keycloak.testsuite.pages.AppPage;
 import org.keycloak.testsuite.pages.ErrorPage;
 import org.keycloak.testsuite.pages.LoginPage;
 import org.keycloak.testsuite.pages.OAuthGrantPage;
-import org.keycloak.testsuite.util.OAuthClient;
+import org.keycloak.testsuite.util.oauth.AccessTokenResponse;
 import org.keycloak.testsuite.util.ServerURLs;
+import org.keycloak.testsuite.util.oauth.AuthorizationEndpointResponse;
 
 public abstract class AbstractFAPITest extends AbstractClientPoliciesTest {
 
@@ -119,39 +121,34 @@ public abstract class AbstractFAPITest extends AbstractClientPoliciesTest {
                 expectedScopes.containsAll(receivedScopes) && receivedScopes.containsAll(expectedScopes));
     }
 
-    protected String getParameterFromUrl(String paramName, boolean fragmentExpected) {
-        return fragmentExpected ? oauth.getCurrentFragment().get(paramName) : oauth.getCurrentQuery().get(paramName);
-    }
-
-    protected String loginUserAndGetCode(String clientId, boolean fragmentResponseModeExpected) {
+    protected String loginUserAndGetCode(String clientId, String nonce, boolean fragmentResponseModeExpected) {
         oauth.clientId(clientId);
-        oauth.doLogin(TEST_USERNAME, TEST_USERSECRET);
+        oauth.loginForm().nonce(nonce).doLogin(TEST_USERNAME, TEST_USERSECRET);
 
         grantPage.assertCurrent();
         grantPage.assertGrants(OAuthGrantPage.PROFILE_CONSENT_TEXT, OAuthGrantPage.EMAIL_CONSENT_TEXT, OAuthGrantPage.ROLES_CONSENT_TEXT);
         grantPage.accept();
 
-        String code = getParameterFromUrl(OAuth2Constants.CODE, fragmentResponseModeExpected);
+        String code = oauth.parseLoginResponse().getCode();
         Assert.assertNotNull(code);
         return code;
     }
 
-    protected String loginUserAndGetCodeInJwtQueryResponseMode(String clientId) {
+    protected String loginUserAndGetCodeInJwtQueryResponseMode(String clientId, String nonce) {
         oauth.clientId(clientId);
-        oauth.doLogin(TEST_USERNAME, TEST_USERSECRET);
+        oauth.loginForm().nonce(nonce).doLogin(TEST_USERNAME, TEST_USERSECRET);
 
         grantPage.assertCurrent();
         grantPage.assertGrants(OAuthGrantPage.PROFILE_CONSENT_TEXT, OAuthGrantPage.EMAIL_CONSENT_TEXT, OAuthGrantPage.ROLES_CONSENT_TEXT);
         grantPage.accept();
 
-        System.out.println("KKKKK response = " + oauth.getCurrentQuery().get("response"));
-        AuthorizationResponseToken responseToken = oauth.verifyAuthorizationResponseToken(oauth.getCurrentQuery().get("response"));
+        AuthorizationResponseToken responseToken = oauth.verifyAuthorizationResponseToken(oauth.parseLoginResponse().getResponse());
         String code = (String)responseToken.getOtherClaims().get("code");
         Assert.assertNotNull(code);
         return code;
     }
 
-    protected void assertSuccessfulTokenResponse(OAuthClient.AccessTokenResponse tokenResponse) {
+    protected void assertSuccessfulTokenResponse(AccessTokenResponse tokenResponse) {
         assertEquals(200, tokenResponse.getStatusCode());
         MatcherAssert.assertThat(tokenResponse.getIdToken(), Matchers.notNullValue());
         MatcherAssert.assertThat(tokenResponse.getAccessToken(), Matchers.notNullValue());
@@ -178,10 +175,11 @@ public abstract class AbstractFAPITest extends AbstractClientPoliciesTest {
         user.revokeConsent(clientId);
     }
 
-    protected void assertRedirectedToClientWithError(String expectedError, boolean fragmentExpected, String expectedErrorDescription) {
+    protected void assertRedirectedToClientWithError(String expectedError, String expectedErrorDescription) {
         appPage.assertCurrent();
-        assertEquals(expectedError, getParameterFromUrl(OAuth2Constants.ERROR, fragmentExpected));
-        assertEquals(expectedErrorDescription, getParameterFromUrl(OAuth2Constants.ERROR_DESCRIPTION, fragmentExpected));
+        AuthorizationEndpointResponse response = oauth.parseLoginResponse();
+        assertEquals(expectedError, response.getError());
+        assertEquals(expectedErrorDescription, response.getErrorDescription());
     }
 
     protected void assertBrowserWithError(String expectedError) {
@@ -189,18 +187,20 @@ public abstract class AbstractFAPITest extends AbstractClientPoliciesTest {
         Assert.assertEquals(expectedError, errorPage.getError());
     }
 
-    protected OAuthClient.AccessTokenResponse doAccessTokenRequestWithClientSignedJWT(String code, String signedJwt, String codeVerifier, Supplier<CloseableHttpClient> httpClientSupplier) {
+    protected AccessTokenResponse doAccessTokenRequestWithClientSignedJWT(String code, String signedJwt, String codeVerifier, Supplier<CloseableHttpClient> httpClientSupplier) {
         try {
             List<NameValuePair> parameters = new LinkedList<>();
             parameters.add(new BasicNameValuePair(OAuth2Constants.GRANT_TYPE, OAuth2Constants.AUTHORIZATION_CODE));
             parameters.add(new BasicNameValuePair(OAuth2Constants.CODE, code));
-            parameters.add(new BasicNameValuePair(OAuth2Constants.CODE_VERIFIER, codeVerifier));
+            if (codeVerifier != null) {
+                parameters.add(new BasicNameValuePair(OAuth2Constants.CODE_VERIFIER, codeVerifier));
+            }
             parameters.add(new BasicNameValuePair(OAuth2Constants.REDIRECT_URI, oauth.getRedirectUri()));
             parameters.add(new BasicNameValuePair(OAuth2Constants.CLIENT_ASSERTION_TYPE, OAuth2Constants.CLIENT_ASSERTION_TYPE_JWT));
             parameters.add(new BasicNameValuePair(OAuth2Constants.CLIENT_ASSERTION, signedJwt));
 
-            CloseableHttpResponse response = sendRequest(oauth.getAccessTokenUrl(), parameters, httpClientSupplier);
-            return new OAuthClient.AccessTokenResponse(response);
+            CloseableHttpResponse response = sendRequest(oauth.getEndpoints().getToken(), parameters, httpClientSupplier);
+            return new AccessTokenResponse(response);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -216,14 +216,11 @@ public abstract class AbstractFAPITest extends AbstractClientPoliciesTest {
     }
 
     protected CloseableHttpResponse sendRequest(String requestUrl, List<NameValuePair> parameters, Supplier<CloseableHttpClient> httpClientSupplier) throws Exception {
-        CloseableHttpClient client = httpClientSupplier.get();
-        try {
+        try (CloseableHttpClient client = httpClientSupplier.get()) {
             HttpPost post = new HttpPost(requestUrl);
-            UrlEncodedFormEntity formEntity = new UrlEncodedFormEntity(parameters, "UTF-8");
+            UrlEncodedFormEntity formEntity = new UrlEncodedFormEntity(parameters, StandardCharsets.UTF_8);
             post.setEntity(formEntity);
             return client.execute(post);
-        } finally {
-            oauth.closeClient(client);
         }
     }
 }

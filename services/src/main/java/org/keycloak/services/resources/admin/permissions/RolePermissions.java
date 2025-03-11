@@ -34,7 +34,6 @@ import org.keycloak.models.RoleContainerModel;
 import org.keycloak.models.RoleModel;
 import org.keycloak.representations.idm.authorization.DecisionStrategy;
 import org.keycloak.representations.idm.authorization.Permission;
-import org.keycloak.services.ForbiddenException;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -42,6 +41,8 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+
+import jakarta.ws.rs.ForbiddenException;
 
 /**
  * @author <a href="mailto:bill@burkecentral.com">Bill Burke</a>
@@ -53,7 +54,7 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
     protected final RealmModel realm;
     protected final AuthorizationProvider authz;
     protected final MgmtPermissions root;
-    private final ResourceStore resourceStore;
+    protected final ResourceStore resourceStore;
     private static final String RESOURCE_NAME_PREFIX = "role.resource.";
 
     public RolePermissions(KeycloakSession session, RealmModel realm, AuthorizationProvider authz, MgmtPermissions root) {
@@ -86,17 +87,15 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
         ResourceServer server = resourceServer(role);
         if (server == null) return;
 
-        RealmModel realm = server.getRealm();
-
         Policy policy = mapRolePermission(role);
-        if (policy != null) authz.getStoreFactory().getPolicyStore().delete(realm, policy.getId());
+        if (policy != null) authz.getStoreFactory().getPolicyStore().delete(policy.getId());
         policy = mapClientScopePermission(role);
-        if (policy != null) authz.getStoreFactory().getPolicyStore().delete(realm, policy.getId());
+        if (policy != null) authz.getStoreFactory().getPolicyStore().delete(policy.getId());
         policy = mapCompositePermission(role);
-        if (policy != null) authz.getStoreFactory().getPolicyStore().delete(realm, policy.getId());
+        if (policy != null) authz.getStoreFactory().getPolicyStore().delete(policy.getId());
 
         Resource resource = authz.getStoreFactory().getResourceStore().findByName(server, getRoleResourceName(role));
-        if (resource != null) authz.getStoreFactory().getResourceStore().delete(realm, resource.getId());
+        if (resource != null) authz.getStoreFactory().getResourceStore().delete(resource.getId());
     }
 
     @Override
@@ -147,11 +146,11 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
         return root.resourceServer(client);
     }
 
-    private boolean checkAdminRoles(RoleModel role) {
+    boolean checkAdminRoles(RoleModel role) {
         if (AdminRoles.ALL_ROLES.contains(role.getName())) {
             if (root.admin().hasRole(role)) return true;
 
-            ClientModel adminClient = root.getRealmManagementClient();
+            ClientModel adminClient = root.getRealmPermissionsClient();
             // is this an admin role in 'realm-management' client of the realm we are managing?
             if (adminClient.equals(role.getContainer())) {
                 // if this is realm admin role, then check to see if admin has similar permissions
@@ -288,7 +287,7 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
     }
 
     private boolean adminConflictMessage(RoleModel role) {
-        logger.debug("Trying to assign admin privileges of role: " + role.getName() + " but admin doesn't have same privilege");
+        logger.debugf("Trying to assign admin privileges of role: %s but admin doesn't have same privilege", role.getName());
         return false;
     }
 
@@ -300,7 +299,7 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
      */
     @Override
     public boolean canMapRole(RoleModel role) {
-        if (root.users().canManageDefault()) return checkAdminRoles(role);
+        if (root.hasOneAdminRole(AdminRoles.MANAGE_USERS)) return checkAdminRoles(role);
         if (!root.isAdminSameRealm()) {
             return false;
         }
@@ -515,20 +514,20 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
         if (role.getContainer() instanceof ClientModel) {
             client = (ClientModel)role.getContainer();
         } else {
-            client = root.getRealmManagementClient();
+            client = root.getRealmPermissionsClient();
         }
         return client;
     }
 
     @Override
     public Policy manageUsersPolicy(ResourceServer server) {
-        RoleModel role = root.getRealmManagementClient().getRole(AdminRoles.MANAGE_USERS);
+        RoleModel role = root.getRealmPermissionsClient().getRole(AdminRoles.MANAGE_USERS);
         return rolePolicy(server, role);
     }
 
     @Override
     public Policy viewUsersPolicy(ResourceServer server) {
-        RoleModel role = root.getRealmManagementClient().getRole(AdminRoles.VIEW_USERS);
+        RoleModel role = root.getRealmPermissionsClient().getRole(AdminRoles.VIEW_USERS);
         return rolePolicy(server, role);
     }
 

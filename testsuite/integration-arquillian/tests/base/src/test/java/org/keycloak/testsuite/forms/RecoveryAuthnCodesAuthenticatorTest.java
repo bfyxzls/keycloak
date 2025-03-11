@@ -41,7 +41,7 @@ import org.keycloak.testsuite.pages.PasswordPage;
 import org.keycloak.testsuite.pages.SelectAuthenticatorPage;
 import org.keycloak.testsuite.pages.SetupRecoveryAuthnCodesPage;
 import org.keycloak.testsuite.util.FlowUtil;
-import org.keycloak.testsuite.util.OAuthClient;
+import org.keycloak.testsuite.util.oauth.OAuthClient;
 import org.keycloak.testsuite.util.SecondBrowser;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
@@ -128,8 +128,7 @@ public class RecoveryAuthnCodesAuthenticatorTest extends AbstractTestRealmKeyclo
     private void testSetupRecoveryAuthnCodesLogoutOtherSessions(boolean logoutOtherSessions) {
         // login with the user using the second driver
         UserResource testUser = testRealm().users().get(findUser("test-user@localhost").getId());
-        OAuthClient oauth2 = new OAuthClient();
-        oauth2.init(driver2);
+        OAuthClient oauth2 = oauth.newConfig().driver(driver2);
         oauth2.doLogin("test-user@localhost", "password");
         EventRepresentation event1 = events.expectLogin().assertEvent();
         assertEquals(1, testUser.getUserSessions().size());
@@ -149,8 +148,18 @@ public class RecoveryAuthnCodesAuthenticatorTest extends AbstractTestRealmKeyclo
         Assert.assertEquals(logoutOtherSessions, setupRecoveryAuthnCodesPage.isLogoutSessionsChecked());
         setupRecoveryAuthnCodesPage.clickSaveRecoveryAuthnCodesButton();
         assertEquals(AppPage.RequestType.AUTH_RESPONSE, appPage.getRequestType());
-        EventRepresentation event2 = events.expectRequiredAction(EventType.CUSTOM_REQUIRED_ACTION)
-                .user(event1.getUserId()).detail(Details.USERNAME, "test-user@localhost").assertEvent();
+
+        if (logoutOtherSessions) {
+            events.expectLogout(event1.getSessionId())
+                    .detail(Details.LOGOUT_TRIGGERED_BY_REQUIRED_ACTION, UserModel.RequiredAction.CONFIGURE_RECOVERY_AUTHN_CODES.name())
+                    .assertEvent();
+        }
+
+        EventRepresentation event2 = events.expectRequiredAction(EventType.UPDATE_CREDENTIAL)
+                .user(event1.getUserId())
+                .detail(Details.USERNAME, "test-user@localhost")
+                .detail(Details.CREDENTIAL_TYPE, RecoveryAuthnCodesCredentialModel.TYPE)
+                .assertEvent();
         event2 = events.expectLogin().user(event2.getUserId()).session(event2.getDetails().get(Details.CODE_ID))
                 .detail(Details.USERNAME, "test-user@localhost").assertEvent();
 

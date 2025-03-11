@@ -32,15 +32,15 @@ public class LoginPasswordUpdatePage extends LogoutSessionsPage {
     @FindBy(id = "password-confirm")
     private WebElement passwordConfirmInput;
 
-    @FindBy(css = "input[type=\"submit\"]")
+    @FindBy(css = "[type=\"submit\"]")
     private WebElement submitButton;
 
-    @FindBy(className = "alert-error")
+    @FindBy(css = "div[class^='pf-v5-c-alert'], div[class^='alert-error']")
     private WebElement loginErrorMessage;
 
     @FindBy(className = "kc-feedback-text")
     private WebElement feedbackMessage;
-    
+
     @FindBy(name = "cancel-aia")
     private WebElement cancelAIAButton;
 
@@ -50,17 +50,13 @@ public class LoginPasswordUpdatePage extends LogoutSessionsPage {
 
         submitButton.click();
     }
-    
+
     public void cancel() {
         cancelAIAButton.click();
     }
 
     public boolean isCurrent() {
         return PageUtils.getPageTitle(driver).equals("Update password");
-    }
-
-    public void open() {
-        throw new UnsupportedOperationException();
     }
 
     public String getError() {

@@ -21,12 +21,15 @@ import static org.keycloak.protocol.oidc.OIDCConfigAttributes.USE_LOWER_CASE_IN_
 
 import org.keycloak.authentication.authenticators.client.X509ClientAuthenticator;
 import org.keycloak.models.ClientModel;
+import org.keycloak.models.Constants;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.services.util.DPoPUtil;
 import org.keycloak.utils.StringUtil;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * @author <a href="mailto:mposolda@redhat.com">Marek Posolda</a>
@@ -104,7 +107,7 @@ public class OIDCAdvancedConfigWrapper extends AbstractClientConfigWrapper {
     public String getRequestObjectRequired() {
         return getAttribute(OIDCConfigAttributes.REQUEST_OBJECT_REQUIRED);
     }
-    
+
     public void setRequestObjectRequired(String requestObjectRequired) {
         setAttribute(OIDCConfigAttributes.REQUEST_OBJECT_REQUIRED, requestObjectRequired);
     }
@@ -225,6 +228,24 @@ public class OIDCAdvancedConfigWrapper extends AbstractClientConfigWrapper {
     public void setUseRefreshTokenForClientCredentialsGrant(boolean enable) {
         String val =  String.valueOf(enable);
         setAttribute(OIDCConfigAttributes.USE_REFRESH_TOKEN_FOR_CLIENT_CREDENTIALS_GRANT, val);
+    }
+
+    public boolean isStandardTokenExchangeEnabled() {
+        String val = getAttribute(OIDCConfigAttributes.STANDARD_TOKEN_EXCHANGE_ENABLED, "false");
+        return Boolean.parseBoolean(val);
+    }
+    
+    public void setStandardTokenExchangeEnabled(boolean enable) {
+        String val = String.valueOf(enable);
+        setAttribute(OIDCConfigAttributes.STANDARD_TOKEN_EXCHANGE_ENABLED, val);
+    }
+
+    public boolean isStandardTokenExchangeRefreshEnabled() {
+        return Boolean.parseBoolean(getAttribute(OIDCConfigAttributes.STANDARD_TOKEN_EXCHANGE_REFRESH_ENABLED));
+    }
+
+    public void setStandardTokenExchangeRefreshEnabled(boolean enable) {
+        setAttribute(OIDCConfigAttributes.STANDARD_TOKEN_EXCHANGE_REFRESH_ENABLED, String.valueOf(enable));
     }
 
     public String getTlsClientAuthSubjectDn() {
@@ -378,7 +399,7 @@ public class OIDCAdvancedConfigWrapper extends AbstractClientConfigWrapper {
 
     public List<String> getPostLogoutRedirectUris() {
         List<String> postLogoutRedirectUris = getAttributeMultivalued(OIDCConfigAttributes.POST_LOGOUT_REDIRECT_URIS);
-        if(postLogoutRedirectUris == null || postLogoutRedirectUris.isEmpty() || postLogoutRedirectUris.get(0).equals("+")) {
+        if(postLogoutRedirectUris == null || postLogoutRedirectUris.isEmpty()) {
             if(clientModel != null) {
                 return new ArrayList(clientModel.getRedirectUris());
             }
@@ -390,6 +411,18 @@ public class OIDCAdvancedConfigWrapper extends AbstractClientConfigWrapper {
         else if(postLogoutRedirectUris.get(0).equals("-")) {
             return new ArrayList<String>();
         }
+        else if (postLogoutRedirectUris.contains("+")) {
+            Set<String> returnedPostLogoutRedirectUris = postLogoutRedirectUris.stream()
+                    .filter(uri -> !"+".equals(uri)).collect(Collectors.toSet());
+
+            if(clientModel != null) {
+                returnedPostLogoutRedirectUris.addAll(clientModel.getRedirectUris());
+            }
+            else if(clientRep != null) {
+                returnedPostLogoutRedirectUris.addAll(clientRep.getRedirectUris());
+            }
+            return new ArrayList<>(returnedPostLogoutRedirectUris);
+        }
         else {
             return postLogoutRedirectUris;
         }
@@ -399,4 +432,11 @@ public class OIDCAdvancedConfigWrapper extends AbstractClientConfigWrapper {
         setAttributeMultivalued(OIDCConfigAttributes.POST_LOGOUT_REDIRECT_URIS, postLogoutRedirectUris);
     }
 
+    public String getMinimumAcrValue() {
+        return getAttribute(Constants.MINIMUM_ACR_VALUE);
+    }
+
+    public void setMinimumAcrValue(String minimumAcrValue) {
+        setAttribute(Constants.MINIMUM_ACR_VALUE, minimumAcrValue);
+    }
 }
